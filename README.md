@@ -209,6 +209,41 @@ err: D3D7Interface::CreateDevice: Failed to create the D3D9 device
 
 Подробности: [`docs/disciples2-dxvk.md`](docs/disciples2-dxvk.md).
 
+## Часть 7. Chromium: почему не открывался редактор Tinkercad
+
+Симптом: WebGL в headless-пробе работает (`ANGLE … PowerVR`), а в обычном окне
+редактор не открывается и в консоли:
+
+```
+Uncaught Error: WebGL not detected
+THREE.WebGLRenderer: Error creating WebGL context.
+```
+
+В логе GPU-процесса — вот это:
+
+```
+glEGLImageTargetTexture2DOES: EGL image internal format is not supported as a texture
+Attempt to access an uninitialized SharedImage. WebGLDrawingBuffer
+WebGL: CONTEXT_LOST_WEBGL: loseContext: context lost
+```
+
+Контекст создаётся, но общий буфер (SharedImage) через EGLImage на вендорском
+драйвере не поднимается — и WebGL теряет контекст сразу после создания.
+
+**Что помогло:** `--in-process-gpu`. GPU-процесс перестаёт ходить через проблемный
+путь обмена изображениями, и редактор открывается на железе (Chromium держит
+21 файловый дескриптор `/dev/dri` и виден в списке GPU-клиентов).
+
+Прописать постоянно — в `/etc/chromium.d/gpu-vulkan`:
+
+```bash
+export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --use-angle=vulkan --enable-features=Vulkan --in-process-gpu"
+```
+
+Что **не** помогло (проверено): `--use-angle=gl` — WebGL не создаётся вообще
+(zink упирается в `failed to load driver: sunxi-drm`); `--disable-gpu-compositing` —
+ошибки EGLImage остаются.
+
 ## Частые проблемы
 
 | Проблема | Решение |
@@ -220,6 +255,7 @@ err: D3D7Interface::CreateDevice: Failed to create the D3D9 device
 | `overlays=` не подхватился | Имена без префикса `sun60i-a733-`; `.dtbo` — в `/boot/dtb-<версия>/allwinner/overlay/` |
 | После оверлея нет изображения | Убрать оверлеи из `orangepiEnv.txt`, перезагрузить |
 | DXVK: `VK_ERROR_OUT_OF_HOST_MEMORY` | 32-битный процесс, см. Часть 6 |
+| Tinkercad: «WebGL not detected» в окне | `--in-process-gpu`, см. Часть 7 |
 
 ## Альтернативы
 
